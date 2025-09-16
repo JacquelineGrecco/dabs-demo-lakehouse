@@ -25,6 +25,7 @@ targets:
       host: https://adb-1592288592842684.4.azuredatabricks.net
     variables:
       catalog: dev
+    allow_duplicate_names: true
     
   stg:
     git:
@@ -33,6 +34,7 @@ targets:
       host: https://adb-4139363651009003.3.azuredatabricks.net
     variables:
       catalog: stg
+    allow_duplicate_names: true
     run_as:
       service_principal_name: ${workspace.current_user.userName}
     permissions:
@@ -45,6 +47,7 @@ targets:
       branch: main
     variables:
       catalog: prod
+    allow_duplicate_names: true
     workspace:
         host: https://adb-239522510296000.0.azuredatabricks.net
         root_path: /Workspace/Shared/production/.bundle/${bundle.name}/${bundle.target}
