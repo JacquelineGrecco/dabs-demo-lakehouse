@@ -8,6 +8,7 @@ resources:
         periodic:
           interval: 1
           unit: DAYS
+        allow_duplicate_names: true
 
       email_notifications:
        on_failure:

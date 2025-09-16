@@ -6,6 +6,7 @@ resources:
       catalog: ${var.catalog}
       schema: demo_dabs_project_${bundle.target}
       serverless: true
+      allow_duplicate_names: true
       libraries:
         - notebook:
             path: ../src/dlt_pipeline.ipynb
