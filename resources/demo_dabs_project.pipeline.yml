@@ -1,0 +1,14 @@
+# The main pipeline for demo_dabs_project
+resources:
+  pipelines:
+    demo_dabs_project_pipeline:
+      name: demo_dabs_project_pipeline
+      catalog: ${var.catalog}
+      schema: demo_dabs_project_${bundle.target}
+      serverless: true
+      libraries:
+        - notebook:
+            path: ../src/dlt_pipeline.ipynb
+
+      configuration:
+        bundle.sourcePath: ${workspace.file_path}/src

@@ -1,0 +1,26 @@
+# The main job for demo_dabs_project.
+resources:
+  jobs:
+    demo_dabs_project_job_2:
+      name: demo_dabs_project_job_2
+      trigger:
+        # Run this job every day, exactly one day from the last run; see https://docs.databricks.com/api/workspace/jobs/create#trigger
+        periodic:
+          interval: 1
+          unit: DAYS
+
+      email_notifications:
+       on_failure:
+         - ${workspace.current_user.userName}
+         - "jacqueline.grecco@databricks.com"
+
+      tasks:
+        - task_key: notebook_task
+          notebook_task:
+            notebook_path: ../src/notebook.ipynb
+
+        - task_key: refresh_pipeline
+          depends_on:
+            - task_key: notebook_task
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.demo_dabs_project_pipeline.id}

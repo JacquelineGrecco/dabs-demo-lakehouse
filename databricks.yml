@@ -1,0 +1,53 @@
+# This is a Databricks asset bundle definition for demo_dabs_project.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: demo_dabs_project
+
+include:
+  - resources/*.yml
+  - resources/*/*.yml
+
+variables:
+  catalog: 
+    description: "Catalog in UC" 
+
+targets:
+  dev:
+    # The default target uses 'mode: development' to create a development copy.
+    # - Deployed resources get prefixed with '[dev my_user_name]'
+    # - Any job schedules and triggers are paused by default.
+    # See also https://docs.databricks.com/dev-tools/bundles/deployment-modes.html.
+    mode: development
+    git:
+      branch: dev
+    default: true
+    workspace:
+      host: https://adb-1592288592842684.4.azuredatabricks.net
+    variables:
+      catalog: dev
+    
+  stg:
+    git:
+      branch: stg
+    workspace:
+      host: https://adb-4139363651009003.3.azuredatabricks.net
+    variables:
+      catalog: stg
+    run_as:
+      service_principal_name: ${workspace.current_user.userName}
+    permissions:
+      - service_principal_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+
+  prod:
+    mode: production
+    git:
+      branch: main
+    variables:
+      catalog: prod
+    workspace:
+        host: https://adb-239522510296000.0.azuredatabricks.net
+        root_path: /Workspace/Shared/production/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+    - service_principal_name: ${workspace.current_user.userName}
+      level: CAN_MANAGE
