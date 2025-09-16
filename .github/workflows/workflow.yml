@@ -1,0 +1,89 @@
+name: Databricks pipeline
+
+on:
+  push:
+    branches: ["main","dev","stg"]
+  pull_request:
+    branches: ["main","dev","stg"]
+  workflow_dispatch:  # This enables manual triggers with inputs
+    inputs:
+      target:
+        type: choice
+        description: "Target environment"
+        required: true
+        default: "dev"
+        options:
+          - "dev"
+          - "stg" 
+          - "prod"
+
+env:
+  DATABRICKS_CLIENT_ID: ${{secrets.DATABRICKS_CLIENT_ID}}
+  DATABRICKS_CLIENT_SECRET: ${{secrets.DATABRICKS_CLIENT_SECRET}}
+
+jobs:
+  deploy:
+    name: Deploy bundle
+    runs-on: ubuntu-latest
+
+    environment: ${{ github.event.inputs.target || (github.ref_name == 'main' && 'prod') || (github.ref_name == 'stg' && 'stg') || 'dev' }}
+
+    steps:
+      - name: Set target environment
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ github.event.inputs.target }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "target=prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "stg" ]; then
+            echo "target=stg" >> $GITHUB_OUTPUT
+          else
+            echo "target=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Deploy bundle
+        run: databricks bundle deploy --target ${{ steps.set-target.outputs.target }}
+        env:
+          DATABRICKS_BUNDLE_ENV: ${{ steps.set-target.outputs.target }}
+
+  run_pipeline:
+    name: Run pipeline update
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    # Only run pipeline for prod deployments
+    if: ${{ (github.event.inputs.target == 'prod') || (github.ref_name == 'main' && github.event_name == 'push') }}
+
+    environment: prod
+
+    steps:
+      - name: Set target environment
+        id: set-target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ github.event.inputs.target }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "target=prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "stg" ]; then
+            echo "target=stg" >> $GITHUB_OUTPUT
+          else
+            echo "target=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Run pipeline update
+        run: databricks bundle run demo_dabs_project_job --target ${{ steps.set-target.outputs.target }}
+        env:
+          DATABRICKS_BUNDLE_ENV: ${{ steps.set-target.outputs.target }}
