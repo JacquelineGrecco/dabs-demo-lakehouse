@@ -8,7 +8,6 @@ resources:
         periodic:
           interval: 1
           unit: DAYS
-
       email_notifications:
        on_failure:
          - ${workspace.current_user.userName}
