@@ -2,10 +2,10 @@ name: Databricks pipeline
 
 on:
   push:
-    branches: ["main","dev","stg"]
+    branches: ["main", "dev", "stg"]
   pull_request:
-    branches: ["main","dev","stg"]
-  workflow_dispatch:  # This enables manual triggers with inputs
+    branches: ["main", "dev", "stg"]
+  workflow_dispatch:
     inputs:
       target:
         type: choice
@@ -14,22 +14,33 @@ on:
         default: "dev"
         options:
           - "dev"
-          - "stg" 
+          - "stg"
           - "prod"
 
+permissions:
+  id-token: write   # Needed for OIDC
+  contents: read
+
 env:
-  DATABRICKS_CLIENT_ID: ${{secrets.DATABRICKS_CLIENT_ID}}
-  DATABRICKS_CLIENT_SECRET: ${{secrets.DATABRICKS_CLIENT_SECRET}}
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
 jobs:
   deploy:
-    name: Deploy bundle
+    name: Deploy Databricks bundle
     runs-on: ubuntu-latest
 
     environment: ${{ github.event.inputs.target || (github.ref_name == 'main' && 'prod') || (github.ref_name == 'stg' && 'stg') || 'dev' }}
 
     steps:
-      - name: Set target environment
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Determine target environment
         id: set-target
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -42,48 +53,61 @@ jobs:
             echo "target=dev" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Authenticate Databricks (auto OIDC or SP)
+        id: databricks-auth
+        run: |
+          set -e
+          echo "Attempting OIDC authentication..."
+          if databricks auth login --host "$DATABRICKS_HOST" --oidc > /dev/null 2>&1; then
+            echo "auth_type=oidc" >> $GITHUB_OUTPUT
+            echo "✅ Authenticated with OIDC federated credentials."
+          elif [ -n "$DATABRICKS_CLIENT_ID" ] && [ -n "$DATABRICKS_CLIENT_SECRET" ]; then
+            echo "OIDC not available — falling back to Service Principal..."
+            databricks auth login --host "$DATABRICKS_HOST" \
+              --client-id "$DATABRICKS_CLIENT_ID" \
+              --client-secret "$DATABRICKS_CLIENT_SECRET"
+            echo "auth_type=service_principal" >> $GITHUB_OUTPUT
+            echo "✅ Authenticated with Service Principal credentials."
+          else
+            echo "❌ Authentication failed: No valid OIDC or Service Principal credentials found."
+            exit 1
+          fi
 
-      - name: Setup databricks CLI
-        uses: databricks/setup-cli@main
+      - name: Verify authentication
+        run: databricks auth status
 
-      - name: Deploy bundle
+      - name: Deploy Databricks bundle
         run: databricks bundle deploy --target ${{ steps.set-target.outputs.target }}
         env:
           DATABRICKS_BUNDLE_ENV: ${{ steps.set-target.outputs.target }}
 
   run_pipeline:
-    name: Run pipeline update
+    name: Run Databricks pipeline update
     runs-on: ubuntu-latest
     needs: deploy
-
-    # Only run pipeline for prod deployments
     if: ${{ (github.event.inputs.target == 'prod') || (github.ref_name == 'main' && github.event_name == 'push') }}
-
     environment: prod
 
     steps:
-      - name: Set target environment
-        id: set-target
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+
+      - name: Authenticate Databricks (reuse same logic)
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "target=${{ github.event.inputs.target }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "main" ]; then
-            echo "target=prod" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref_name }}" = "stg" ]; then
-            echo "target=stg" >> $GITHUB_OUTPUT
+          set -e
+          echo "Attempting OIDC authentication..."
+          if databricks auth login --host "$DATABRICKS_HOST" --oidc > /dev/null 2>&1; then
+            echo "✅ Authenticated with OIDC federated credentials."
+          elif [ -n "$DATABRICKS_CLIENT_ID" ] && [ -n "$DATABRICKS_CLIENT_SECRET" ]; then
+            echo "OIDC not available — falling back to Service Principal..."
+            databricks auth login --host "$DATABRICKS_HOST" \
+              --client-id "$DATABRICKS_CLIENT_ID" \
+              --client-secret "$DATABRICKS_CLIENT_SECRET"
+            echo "✅ Authenticated with Service Principal credentials."
           else
-            echo "target=dev" >> $GITHUB_OUTPUT
+            echo "❌ Authentication failed: No valid credentials found."
+            exit 1
           fi
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup databricks CLI
-        uses: databricks/setup-cli@main
-
-      - name: Run pipeline update
-        run: databricks bundle run demo_dabs_project_job --target ${{ steps.set-target.outputs.target }}
-        env:
-          DATABRICKS_BUNDLE_ENV: ${{ steps.set-target.outputs.target }}
+      - name: Run Databricks job/pipeline
+        run: databricks bundle run demo_dabs_project_job --target ${{ needs.deploy.outputs.target || 'prod' }}
