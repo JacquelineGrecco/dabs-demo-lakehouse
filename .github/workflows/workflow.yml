@@ -40,7 +40,7 @@ jobs:
       - name: Setup Databricks CLI
         uses: databricks/setup-cli@main
         with:
-          version: "0.223.1" # stable CLI for DABs
+          version: "0.223.1" # stable CLI version for DABs
 
       - name: Determine target environment
         id: set-target
@@ -68,16 +68,24 @@ jobs:
             export DATABRICKS_CLIENT_ID="$DATABRICKS_CLIENT_ID"
             export DATABRICKS_CLIENT_SECRET="$DATABRICKS_CLIENT_SECRET"
             export DATABRICKS_HOST="$DATABRICKS_HOST"
-            databricks auth login
+            databricks auth env
             echo "auth_type=service_principal" >> $GITHUB_OUTPUT
-            echo "✅ Authenticated with Service Principal credentials."
+            echo "✅ Authenticated with Service Principal environment credentials."
           else
             echo "❌ Authentication failed: No valid OIDC or Service Principal credentials found."
             exit 1
           fi
 
       - name: Verify authentication
-        run: databricks auth status
+        run: |
+          echo "🔍 Checking active Databricks authentication:"
+          databricks auth status
+          databricks current-user get
+
+      - name: Validate Databricks bundle
+        run: databricks bundle validate --target ${{ steps.set-target.outputs.target }}
+        env:
+          DATABRICKS_BUNDLE_ENV: ${{ steps.set-target.outputs.target }}
 
       - name: Deploy Databricks bundle
         run: databricks bundle deploy --target ${{ steps.set-target.outputs.target }}
@@ -109,12 +117,18 @@ jobs:
             export DATABRICKS_CLIENT_ID="$DATABRICKS_CLIENT_ID"
             export DATABRICKS_CLIENT_SECRET="$DATABRICKS_CLIENT_SECRET"
             export DATABRICKS_HOST="$DATABRICKS_HOST"
-            databricks auth login
-            echo "✅ Authenticated with Service Principal credentials."
+            databricks auth env
+            echo "✅ Authenticated with Service Principal environment credentials."
           else
             echo "❌ Authentication failed: No valid credentials found."
             exit 1
           fi
+
+      - name: Verify authentication
+        run: |
+          echo "🔍 Checking active Databricks authentication:"
+          databricks auth status
+          databricks current-user get
 
       - name: Run Databricks job
         run: databricks bundle run demo_dabs_project_job --target ${{ needs.deploy.outputs.target || 'prod' }}
