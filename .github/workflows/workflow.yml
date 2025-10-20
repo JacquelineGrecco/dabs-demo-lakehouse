@@ -75,13 +75,6 @@ jobs:
             echo "❌ Authentication failed: No valid OIDC or Service Principal credentials found."
             exit 1
           fi
-
-      - name: Verify authentication
-        run: |
-          echo "🔍 Checking active Databricks authentication:"
-          databricks auth status
-          databricks current-user get
-
       - name: Validate Databricks bundle
         run: databricks bundle validate --target ${{ steps.set-target.outputs.target }}
         env:
